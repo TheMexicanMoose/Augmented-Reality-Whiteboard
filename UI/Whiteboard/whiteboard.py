@@ -1,9 +1,12 @@
+import datetime
 
 import customtkinter
+from PIL import ImageGrab
 
 from Helpers.ButtonValue import ButtonValue
 from Helpers.Frame import ButtonFrame
 from UI.Whiteboard.Constants import *
+from Helpers.Detection import *
 
 import cv2
 import numpy as np
@@ -25,6 +28,8 @@ class Whiteboard(customtkinter.CTk):
         self.model = YOLO("../../models/fingers-51s.pt")
 
         self.cam = cv2.VideoCapture(0)
+        self.cam.set(cv2.CAP_PROP_FRAME_WIDTH, 1400)
+        self.cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 800)
 
         self.title("Whiteboard")
 
@@ -34,6 +39,7 @@ class Whiteboard(customtkinter.CTk):
         self.has_reset = True
 
         self.camera_last_pose = []
+
 
         self.detection_thread = threading.Thread(target=self.handle_camera_detection,daemon=True)
         self.detection_thread.start()
@@ -48,6 +54,9 @@ class Whiteboard(customtkinter.CTk):
 
         self.draw_button = customtkinter.CTkButton(self.main_frame, text="draw", command=self.build_color_frame, bg_color="#2B2B2B")
         self.draw_button.grid(row=0, column=0, padx=10, pady=(10, 0), sticky="ew")
+
+        self.save_button = customtkinter.CTkButton(self.main_frame,text="save",command=self.save_canvas, bg_color="#2B2B2B")
+        self.save_button.grid(row=1, column=0, padx=10, pady=(10, 0), sticky="ew")
 
         self.canvas_frame = customtkinter.CTkFrame(self)
         self.canvas_frame._set_appearance_mode("dark")
@@ -66,26 +75,17 @@ class Whiteboard(customtkinter.CTk):
             buttons.append(ButtonValue(COLOR_BUTTON_LIST[i],lambda color=color:self.change_color(color),HOVER_COLOR_LIST[i],COLOR_BUTTON_LIST[i]))
         return buttons
 
-    def change_color(self, color):
-        self.color = color
+    def reset_poses(self):
+        self.Xpos = 0
+        self.Ypos = 0
 
     def last_pos(self, event):
         self.Xpos = event.x
         self.Ypos = event.y
 
-    def reset_poses(self):
-        self.Xpos = 0
-        self.Ypos = 0
-
     def detected_last_pose(self):
         self.Xpos = self.camera_last_pose[0]
         self.Ypos = self.camera_last_pose[1]
-
-    def handle_detection_drw(self):
-        if not self.frame.get_tag() == "colors":
-            return
-        self.canvas.create_line(self.Xpos, self.Ypos, self.camera_last_pose[0], self.camera_last_pose[1], width=2, fill=self.color)
-        self.detected_last_pose()
 
     def handle_draw(self, event):
         if not self.frame.get_tag() == "colors":
@@ -93,37 +93,36 @@ class Whiteboard(customtkinter.CTk):
         self.canvas.create_line(self.Xpos, self.Ypos, event.x, event.y, width=2, fill=self.color)
         self.last_pos(event)
 
-    def handle_rectangle(self, event):
-        if not self.frame.get_tag() == "shapes":
+    def handle_detection_draw(self):
+        if not self.frame.get_tag() == "colors":
             return
+        self.canvas.create_line(self.Xpos, self.Ypos, self.camera_last_pose[0], self.camera_last_pose[1], width=2, fill=self.color)
+        self.detected_last_pose()
+
+    def change_color(self, color):
+        self.color = color
 
     def build_color_frame(self):
         self.frame = ButtonFrame(self,"colors",self.build_color_buttons(),end_command=self.kill_frame,tag="colors")
 
+    def save_canvas(self):
+        x = self.canvas.winfo_rootx()
+        y = self.canvas.winfo_rooty()
+        width = self.canvas.winfo_width()
+        height = self.canvas.winfo_height()
+
+        painting = ImageGrab.grab((x, y, x+ width, y+ height))
+
+        cv_painting = cv2.cvtColor(np.array(painting), cv2.COLOR_RGB2BGR)
+        date = datetime.datetime.now()
+        date = str(date)
+        cv2.imwrite(f"screen_shot{date}.png", cv_painting)
+        cv2.imshow("Saved Painting", cv_painting)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
     def kill_frame(self):
         self.frame = None
-
-    def check_overlap(self,l1, r1, l2, r2):
-        if l1[0] > r2[0] or l2[0] > r1[0]:
-            return False
-
-        if l1[1] > r2[1] or l2[1] > r1[1]:
-            return False
-
-        return True
-
-    def get_overlap_cords(self,l1, r1, l2, r2):
-        new_x1 = max(l1[0], l2[0])
-        new_y1 = max(l1[1], l2[1])
-        new_x2 = min(r2[0], r1[0])
-        new_y2 = min(r1[1], r2[1])
-
-        return [new_x1, new_y1, new_x2, new_y2]
-
-    def get_middle(self,x1, y1, x2, y2):
-        middle_x = (x1 + x2) / 2
-        middle_y = (y1 + y2) / 2
-        return [middle_x, middle_y]
 
     def handle_camera_detection(self):
         while True:
@@ -141,26 +140,29 @@ class Whiteboard(customtkinter.CTk):
                         index_pose = result.boxes.xyxy[i].cpu().numpy()
 
             if thumb_pose is not None and index_pose is not None:
-                overlap = self.check_overlap(thumb_pose[:2], thumb_pose[2:], index_pose[:2], index_pose[2:])
+                overlap = check_overlap(thumb_pose[:2], thumb_pose[2:], index_pose[:2], index_pose[2:])
 
                 print(overlap)
 
                 if overlap:
-                    overlap_pose = self.get_overlap_cords(thumb_pose[:2], thumb_pose[2:], index_pose[:2],
+                    overlap_pose = get_overlap_cords(thumb_pose[:2], thumb_pose[2:], index_pose[:2],
                                                           index_pose[2:])
                     print(overlap_pose)
-                    overlap_center = self.get_middle(*overlap_pose)
+                    overlap_center = get_middle(*overlap_pose)
                     overlap_center = [int(i) for i in overlap_center]
                     print(overlap_center)
+
+
 
                     self.camera_last_pose = overlap_center
                     if self.has_reset:
                         self.after(0, self.detected_last_pose)
                         self.has_reset = False
-                    self.after(0,self.handle_detection_drw)
+                    self.after(0, self.handle_detection_draw)
                 else:
                     self.reset_poses()
                     self.has_reset = True
+
 
 
 
