@@ -83,12 +83,12 @@ class Whiteboard(customtkinter.CTk):
 
         self.canvas.bind("<B1-Motion>", self.handle_draw)
 
-        self.one_euro_x = OneEuroFilter()
-        self.one_euro_y = OneEuroFilter()
+        self.one_euro_x = OneEuroFilter(fcm=0.5,b=0.004,fcd=1)
+        self.one_euro_y = OneEuroFilter(fcm=0.5,b=0.004,fcd=1)
 
     def reset_one_euro_filters(self):
-        self.one_euro_x = OneEuroFilter()
-        self.one_euro_y = OneEuroFilter()
+        self.one_euro_x = OneEuroFilter(fcm=0.5,b=0.004,fcd=1)
+        self.one_euro_y = OneEuroFilter(fcm=0.5,b=0.004,fcd=1)
 
     def build_color_buttons(self):
         buttons = []
