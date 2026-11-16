@@ -1,7 +1,10 @@
 import datetime
+import time
 
 import customtkinter
 from PIL import ImageGrab
+
+from pathlib import Path
 
 from Helpers.ButtonValue import ButtonValue
 from Helpers.Frame import ButtonFrame
@@ -25,7 +28,14 @@ class Whiteboard(customtkinter.CTk):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
-        self.model = YOLO("../../models/fingers-51s.pt")
+        MODEL_PATH = (
+                Path(__file__).resolve().parents[2]
+                / "models"
+                / "fingers-51s_openvino_model"
+        )
+
+        self.model = YOLO(str(MODEL_PATH), task="detect")
+
 
         self.cam = cv2.VideoCapture(0)
         self.cam.set(cv2.CAP_PROP_FRAME_WIDTH, 1400)
@@ -39,6 +49,9 @@ class Whiteboard(customtkinter.CTk):
         self.has_reset = True
 
         self.camera_last_pose = []
+
+        self.end_time = 0.0
+        self.start_time = 0.0
 
 
         self.detection_thread = threading.Thread(target=self.handle_camera_detection,daemon=True)
@@ -156,12 +169,19 @@ class Whiteboard(customtkinter.CTk):
 
                     self.camera_last_pose = overlap_center
                     if self.has_reset:
-                        self.after(0, self.detected_last_pose)
-                        self.has_reset = False
+                        self.end_time = time.time()
+                        if self.end_time - self.start_time <= 0.1:
+                            self.has_reset = False
+                            self.Xpos = self.camera_last_pose[0]
+                            self.Ypos = self.camera_last_pose[1]
+                        else:
+                            self.after(0, self.detected_last_pose)
+                            self.has_reset = False
                     self.after(0, self.handle_detection_draw)
                 else:
                     self.reset_poses()
                     self.has_reset = True
+                    self.start_time = time.time()
 
 
 
