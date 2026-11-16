@@ -10,6 +10,7 @@ from Helpers.ButtonValue import ButtonValue
 from Helpers.Frame import ButtonFrame
 from UI.Whiteboard.Constants import *
 from Helpers.Detection import *
+from Helpers.OneEuroFilter import *
 
 import cv2
 import numpy as np
@@ -31,7 +32,7 @@ class Whiteboard(customtkinter.CTk):
         MODEL_PATH = (
                 Path(__file__).resolve().parents[2]
                 / "models"
-                / "fingers-51s_openvino_model"
+                / "fingers-51s.pt"
         )
 
         self.model = YOLO(str(MODEL_PATH), task="detect")
@@ -81,6 +82,13 @@ class Whiteboard(customtkinter.CTk):
         self.canvas.bind("<Button-1>", self.last_pos)
 
         self.canvas.bind("<B1-Motion>", self.handle_draw)
+
+        self.one_euro_x = OneEuroFilter()
+        self.one_euro_y = OneEuroFilter()
+
+    def reset_one_euro_filters(self):
+        self.one_euro_x = OneEuroFilter()
+        self.one_euro_y = OneEuroFilter()
 
     def build_color_buttons(self):
         buttons = []
@@ -165,9 +173,14 @@ class Whiteboard(customtkinter.CTk):
                     overlap_center = [int(i) for i in overlap_center]
                     print(overlap_center)
 
+                    time_stap = time.perf_counter()
+                    filtered_x = self.one_euro_x.apply(overlap_center[0],time_stap)
+                    filtered_y = self.one_euro_y.apply(overlap_center[1],time_stap)
 
+                    filtered_overlap_center = [filtered_x, filtered_y]
+                    print(filtered_overlap_center)
 
-                    self.camera_last_pose = overlap_center
+                    self.camera_last_pose = filtered_overlap_center
                     if self.has_reset:
                         self.end_time = time.time()
                         if self.end_time - self.start_time <= 0.1:
@@ -180,6 +193,7 @@ class Whiteboard(customtkinter.CTk):
                     self.after(0, self.handle_detection_draw)
                 else:
                     self.reset_poses()
+                    self.reset_one_euro_filters()
                     self.has_reset = True
                     self.start_time = time.time()
 

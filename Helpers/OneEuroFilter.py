@@ -21,6 +21,7 @@ class OneEuroFilter:
             self.c_time = time
             self.c_pos = pos
             raw_vel = self.calc_velocity()
+            self.calc_alpha_vel()
             self.calc_filtered_vel(raw_vel)
             self.calc_new_cfc()
             new_pos = self.calc_filtered_pose()
@@ -30,7 +31,13 @@ class OneEuroFilter:
 
             self.c_pos = 0
             self.c_time = 0.0
+
+            print(self.c_filtered_vel)
+
             self.c_filtered_vel = 0
+
+            print(self.cfc)
+
 
             return new_pos
         else:
@@ -68,7 +75,7 @@ class OneEuroFilter:
         self.c_filtered_vel = current_trust + past_trust
 
     def calc_new_cfc(self):
-        self.cfc = self.fcm + (self.b * abs(self.p_filtered_vel))
+        self.cfc = self.fcm + (self.b * abs(self.c_filtered_vel))
 
     def calc_filtered_pose(self):
         alpha_pos = self.calc_alpha_pos()
